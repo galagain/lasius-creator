@@ -1,10 +1,14 @@
-import requests
+from flask import Flask, request, render_template, Response, jsonify
+from flask_socketio import SocketIO, emit
 import os
 import time
 import logging
 import json
-import argparse
 from dotenv import load_dotenv
+import requests
+
+app = Flask(__name__)
+socketio = SocketIO(app)
 
 # Configure logging
 logging.basicConfig(
@@ -19,6 +23,16 @@ fields_to_fetch = (
     "citations.title,citations.url,citations.paperId,"
     "citations.citationCount,citations.publicationDate,citations.authors"
 )
+
+
+def log_message(message):
+    """
+    Logs a message by emitting it through the socketio connection.
+
+    Args:
+        message (str): The message to be logged.
+    """
+    socketio.emit("log_message", {"message": message})
 
 
 def make_api_call(url, headers, params=None, max_retries=3):
@@ -39,12 +53,12 @@ def make_api_call(url, headers, params=None, max_retries=3):
         if response.status_code == 200:
             return response.json()
         else:
-            logging.warning(
+            log_message(
                 f"Attempt {attempt + 1}/{max_retries} - Error {response.status_code}: {response.text}"
             )
             time.sleep(2)
 
-    logging.error(f"Failed to get a successful response after {max_retries} attempts")
+    log_message(f"Failed to get a successful response after {max_retries} attempts")
     return None
 
 
@@ -102,47 +116,51 @@ def fetch_papers(query, api_key, total_papers, title):
                 paper["queries"] = [query]
             all_papers.extend(papers)
             offset += limit
-            logging.info(
+            log_message(
                 f"[{title}] Fetched {len(papers)} papers. Total so far: {len(all_papers)}. Total requests: {request_count}"
             )
             time.sleep(1)
         else:
             break
 
-    logging.info(f"[{title}] Total requests made: {request_count}")
+    log_message(f"[{title}] Total requests made: {request_count}")
     return all_papers[:total_papers]
 
 
-def main(args):
-    # Load environment variables from .env file
+def generate_json(queries, total_papers, title):
+    """
+    Generate a JSON string containing information about fetched papers.
+
+    Args:
+        queries (list): A list of queries to fetch papers for.
+        total_papers (int): The maximum number of papers to fetch for each query.
+        title (str): The title of the process.
+
+    Returns:
+        str: A JSON string containing information about the fetched papers.
+
+    Raises:
+        None
+    """
     load_dotenv()
     api_key = os.getenv("SEMANTIC_SCHOLAR_API_KEY")
 
     if not api_key:
-        logging.error(
+        log_message(
             "API key for Semantic Scholar not found. Make sure it is set in the .env file."
         )
-        return
-
-    queries = args.queries.split(",")
-    total_papers = args.total_papers
-    title = args.title
-
-    output_file = f"{title.replace(' ', '_')}.json"
-
-    logging.info(f"[{title}] Starting paper search...")
+        return None
 
     papers = []
 
-    # Process each query
     for query_idx, query in enumerate(queries):
         query = query.strip()
-        logging.info(
+        log_message(
             f"[{title}] Processing query ({query_idx + 1}/{len(queries)}): '{query}'"
         )
         papers.extend(fetch_papers(query, api_key, total_papers, title))
 
-    logging.info(
+    log_message(
         f"[{title}] Total papers fetched before removing duplicates: {len(papers)}"
     )
 
@@ -159,35 +177,63 @@ def main(args):
             papers_dict[paper_id] = paper
 
     papers = list(papers_dict.values())
-    logging.info(
+    log_message(
         f"[{title}] Total unique papers after removing duplicates: {len(papers)}"
     )
 
-    with open(output_file, "w") as f:
-        json.dump(papers, f, indent=4)
+    return json.dumps(papers, indent=4)
 
-    logging.info(f"[{title}] JSON generated and saved successfully as '{output_file}'.")
+
+@app.route("/")
+def index():
+    """
+    Renders the index.html template.
+
+    Returns:
+        The rendered index.html template.
+    """
+    return render_template("index.html")
+
+
+@app.route("/generate_json", methods=["POST"])
+def generate_json_route():
+    """
+    Generate JSON route handler.
+
+    This function handles the route for generating JSON data based on the provided queries,
+    total number of papers, and title.
+
+    Returns:
+        If JSON data is successfully generated, it returns a JSON response with the generated data.
+        If JSON data generation fails, it returns a JSON response with an error message and a status code of 500.
+    """
+    queries = request.form["queries"].split(",")
+    total_papers = int(request.form["total_papers"])
+    title = request.form["title"]
+    json_data = generate_json(queries, total_papers, title)
+    if json_data:
+        return jsonify({"json_data": json_data})
+    else:
+        return jsonify({"error": "Failed to generate JSON"}), 500
+
+
+@app.route("/download_json", methods=["POST"])
+def download_json():
+    """
+    Downloads the JSON data as a file.
+
+    This function retrieves the JSON data from the request form and returns it as a response with the appropriate headers for downloading.
+
+    Returns:
+        Response: The response object containing the JSON data as a file.
+    """
+    content = request.form["jsonval"]
+    return Response(
+        content,
+        mimetype="application/json",
+        headers={"Content-Disposition": "attachment;filename=data.json"},
+    )
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Fetch and save research papers from Semantic Scholar."
-    )
-    parser.add_argument(
-        "--queries",
-        type=str,
-        required=True,
-        help="Comma-separated list of search queries.",
-    )
-    parser.add_argument(
-        "--total_papers",
-        type=int,
-        required=True,
-        help="Total number of papers to fetch for each query.",
-    )
-    parser.add_argument(
-        "--title", type=str, required=True, help="Title for the research."
-    )
-
-    args = parser.parse_args()
-    main(args)
+    socketio.run(app, debug=True)

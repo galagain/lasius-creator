@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate JSON</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <link rel="stylesheet" type="text/css" href="static/css/styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>JSON Generator</h1>
+        <p class="description">Enter the details below to generate a JSON file from your API queries. A query consists
+            of keywords used to search for papers in a specific domain. We will extract the most relevant papers based
+            on the total number specified for each query. Use the buttons below for example queries.</p>
+        <div class="example-buttons">
+            <button type="button" onclick="fillExample1()">Semantic SLAM</button>
+            <button type="button" onclick="fillExample2()">NeRF SLAM</button>
+        </div>
+        <form id="jsonForm" method="POST">
+            <div class="form-group">
+                <label for="queries">Queries (comma-separated):</label>
+                <input type="text" id="queries" name="queries" placeholder="Enter your queries" required>
+            </div>
+            <div class="form-group">
+                <label for="total_papers">Total Papers per Query:</label>
+                <input type="number" id="total_papers" name="total_papers"
+                    placeholder="Enter the total number of papers per query" required>
+            </div>
+            <div class="form-group">
+                <label for="title">Title:</label>
+                <input type="text" id="title" name="title" placeholder="Enter the title for the JSON file" required>
+            </div>
+            <button type="button" onclick="generateJson()">Generate JSON</button>
+        </form>
+        <div id="logs" class="hidden"></div>
+        <form id="downloadForm" method="POST" action="/download_json" class="hidden">
+            <input type="hidden" id="jsonval" name="jsonval">
+            <button type="submit">Download JSON</button>
+        </form>
+    </div>
+    <script src="static/js/scripts.js"></script>
+</body>
+
+</html>
