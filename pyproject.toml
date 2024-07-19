@@ -1,0 +1,12 @@
+[tool.poetry]
+name = "Creator"
+version = "0.1.0"
+description = ""
+authors = ["galagain <calvin@galagain.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.masonry.api"
