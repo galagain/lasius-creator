@@ -6,6 +6,7 @@ import logging
 import json
 from dotenv import load_dotenv
 import requests
+from collections import defaultdict
 
 app = Flask(__name__)
 socketio = SocketIO(app)
@@ -112,8 +113,6 @@ def fetch_papers(query, api_key, total_papers, title):
             papers = data.get("data", [])
             if not papers:
                 break
-            for paper in papers:
-                paper["queries"] = [query]
             all_papers.extend(papers)
             offset += limit
             log_message(
@@ -151,37 +150,61 @@ def generate_json(queries, total_papers, title):
         )
         return None
 
-    papers = []
+    papers_dict = {}
+    queries_data = defaultdict(list)
+    paper_data = []
+    links_data = []
+    authors_data = {}
 
     for query_idx, query in enumerate(queries):
         query = query.strip()
         log_message(
             f"[{title}] Processing query ({query_idx + 1}/{len(queries)}): '{query}'"
         )
-        papers.extend(fetch_papers(query, api_key, total_papers, title))
+        query_papers = fetch_papers(query, api_key, total_papers, title)
+        for paper in query_papers:
+            paper_id = paper["paperId"]
+            if paper_id not in papers_dict:
+                papers_dict[paper_id] = paper
+                paper_data.append(
+                    {
+                        "paperId": paper["paperId"],
+                        "title": paper["title"],
+                        "url": paper["url"],
+                        "citationCount": paper["citationCount"],
+                        "publicationDate": paper["publicationDate"],
+                        "authorIds": [
+                            author["authorId"] for author in paper["authors"]
+                        ],
+                    }
+                )
+
+                for author in paper["authors"]:
+                    authors_data[author["authorId"]] = author["name"]
+
+                for ref in paper.get("references", []):
+                    links_data.append(
+                        {"source": paper["paperId"], "target": ref["paperId"]}
+                    )
+
+                for cite in paper.get("citations", []):
+                    links_data.append(
+                        {"source": cite["paperId"], "target": paper["paperId"]}
+                    )
+
+            queries_data[query].append(paper_id)
 
     log_message(
-        f"[{title}] Total papers fetched before removing duplicates: {len(papers)}"
+        f"[{title}] Total unique papers after removing duplicates: {len(paper_data)}"
     )
 
-    # Remove duplicates and merge queries
-    papers_dict = {}
-    for paper in papers:
-        paper_id = paper["paperId"]
-        if paper_id in papers_dict:
-            papers_dict[paper_id]["queries"].extend(paper["queries"])
-            papers_dict[paper_id]["queries"] = list(
-                set(papers_dict[paper_id]["queries"])
-            )
-        else:
-            papers_dict[paper_id] = paper
-
-    papers = list(papers_dict.values())
-    log_message(
-        f"[{title}] Total unique papers after removing duplicates: {len(papers)}"
-    )
-
-    return json.dumps(papers, indent=4)
+    result = {
+        "papers": paper_data,
+        "links": links_data,
+        "queries": queries_data,
+        "authors": authors_data,
+    }
+    return json.dumps(result, indent=4)
 
 
 @app.route("/")
