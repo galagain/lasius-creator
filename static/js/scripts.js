@@ -4,6 +4,7 @@ socket.on("log_message", function (data) {
   var logs = document.getElementById("logs");
   logs.classList.remove("hidden");
   logs.innerHTML += data.message + "<br>";
+  logs.scrollTop = logs.scrollHeight;
 });
 
 function generateJson() {
