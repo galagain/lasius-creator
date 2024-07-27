@@ -199,6 +199,7 @@ def generate_json(queries, total_papers, title):
     )
 
     result = {
+        "title": title.replace(" ", "_"),
         "papers": paper_data,
         "links": links_data,
         "queries": queries_data,
