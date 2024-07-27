@@ -38,7 +38,8 @@
         <div id="logs" class="hidden"></div>
         <form id="downloadForm" method="POST" action="/download_json" class="hidden">
             <input type="hidden" id="jsonval" name="jsonval">
-            <button type="submit">Download JSON</button>
+            <input type="hidden" id="filename" name="filename">
+            <button type="submit" onclick="setDownloadFilename()">Download JSON</button>
         </form>
     </div>
     <script src="static/js/scripts.js"></script>

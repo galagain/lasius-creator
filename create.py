@@ -251,10 +251,11 @@ def download_json():
         Response: The response object containing the JSON data as a file.
     """
     content = request.form["jsonval"]
+    filename = request.args.get("filename", "data.json")
     return Response(
         content,
         mimetype="application/json",
-        headers={"Content-Disposition": "attachment;filename=data.json"},
+        headers={"Content-Disposition": f"attachment;filename={filename}"},
     )
 
 

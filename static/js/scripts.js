@@ -19,10 +19,18 @@ function generateJson() {
         alert("Error generating JSON");
       } else {
         document.getElementById("jsonval").value = data.json_data;
+        const title = document.getElementById("title").value.replace(/ /g, "_");
+        document.getElementById("filename").value = title + ".json";
         document.getElementById("downloadForm").classList.remove("hidden");
       }
     })
     .catch((error) => console.error("Error:", error));
+}
+
+function setDownloadFilename() {
+  const title = document.getElementById("title").value.replace(/ /g, "_");
+  const filename = title + ".json";
+  document.getElementById("downloadForm").action = "/download_json?filename=" + filename;
 }
 
 function fillExample1() {
