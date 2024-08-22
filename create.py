@@ -152,6 +152,7 @@ def generate_json(queries, total_papers, title):
 
     papers_dict = {}
     queries_data = defaultdict(list)
+    queries_data_more = defaultdict(list)
     paper_data = []
     links_data = []
     authors_data = {}
@@ -186,11 +187,43 @@ def generate_json(queries, total_papers, title):
                     links_data.append(
                         {"source": paper["paperId"], "target": ref["paperId"]}
                     )
+                    paper_data.append(
+                        {
+                            "paperId": ref["paperId"],
+                            "title": ref["title"],
+                            "url": ref["url"],
+                            "citationCount": ref["citationCount"],
+                            "publicationDate": ref["publicationDate"],
+                            "authorIds": [
+                                author["authorId"] for author in ref["authors"]
+                            ],
+                        }
+                    )
+                    for author in ref["authors"]:
+                        authors_data[author["authorId"]] = author["name"]
+                    if ref["paperId"] not in queries_data_more[query]:
+                        queries_data_more[query].append(ref["paperId"])
 
                 for cite in paper.get("citations", []):
                     links_data.append(
                         {"source": cite["paperId"], "target": paper["paperId"]}
                     )
+                    paper_data.append(
+                        {
+                            "paperId": cite["paperId"],
+                            "title": cite["title"],
+                            "url": cite["url"],
+                            "citationCount": cite["citationCount"],
+                            "publicationDate": cite["publicationDate"],
+                            "authorIds": [
+                                author["authorId"] for author in cite["authors"]
+                            ],
+                        }
+                    )
+                    for author in cite["authors"]:
+                        authors_data[author["authorId"]] = author["name"]
+                    if cite["paperId"] not in queries_data_more[query]:
+                        queries_data_more[query].append(cite["paperId"])
 
             queries_data[query].append(paper_id)
 
@@ -203,6 +236,7 @@ def generate_json(queries, total_papers, title):
         "papers": paper_data,
         "links": links_data,
         "queries": queries_data,
+        "queries_more": queries_data_more,
         "authors": authors_data,
     }
     return json.dumps(result, indent=4)
