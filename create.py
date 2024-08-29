@@ -211,6 +211,7 @@ def generate_json(queries, total_papers, title):
                         queries_data_more[query].append(cite["paperId"])
 
             queries_data[query].append(paper_id)
+            queries_data_more[query].append(paper_id)
 
     log_message(
         f"[{title}] Total unique papers after removing duplicates: {len(paper_data)}"
