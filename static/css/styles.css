@@ -4,30 +4,25 @@ body {
 }
 
 body {
-  font-family: Arial, sans-serif;
-  margin: 0;
-  padding: 0;
-  background-color: #262626;
-  color: #f5f5f5;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  font-family: "Roboto", sans-serif; /* Use 'Roboto' font from Google Fonts */
+  background-color: #262626; /* Set background color to dark gray */
+  color: #f8f9fa; /* Set text color to light gray */
+  margin: 0; /* Remove default margin */
+  display: flex; /* Use flexbox for layout */
+  flex-direction: column; /* Vertical stack */
+  align-items: center; /* Center content horizontally */
+  height: 100vh; /* Set height to full viewport height */
+  padding: 0; /* No padding around the content */
 }
 
 .container {
   max-width: 40%;
-  margin: 1% auto;
+  margin: 0 auto; /* Center horizontally */
   padding: 2%;
   background-color: #333;
   box-shadow: 0 0 5vh rgba(0, 0, 0, 1);
   border-radius: 8px;
-}
-
-h1 {
-  text-align: center;
-  color: #fff;
-  font-size: 2em;
-  margin-top: 1vh;
+  margin-top: 2%; /* Space between header and main content */
 }
 
 .description {
@@ -113,4 +108,77 @@ button:hover {
   max-height: 10vh;
   overflow-y: auto;
   border-radius: 3vh;
+}
+
+/* Header styling */
+header {
+  display: flex; /* Use flexbox */
+  flex-direction: column; /* Stack children vertically */
+  align-items: center; /* Center content horizontally */
+  height: auto; /* Adjust height to content */
+  width: 100%; /* Full width */
+  text-align: center; /* Center-align text */
+  margin-bottom: 20px; /* Space below header */
+}
+
+header h1 {
+  font-size: 3rem; /* Set font size to 3rem */
+  font-weight: 700; /* Make text bold */
+  color: #f8f9fa; /* Set text color to light gray */
+  margin: 0; /* Remove default margin */
+}
+
+
+.subtitle {
+  font-size: 1rem;
+  font-weight: 400;
+  color: #f8f9fa;
+  text-align: center;
+}
+
+.subtitle .white {
+  color: #ffffff;
+}
+
+.subtitle .green {
+  color: #4caf50;
+}
+
+.cursor {
+  display: inline-block;
+  background-color: #ccc;
+  margin-left: 0.1rem;
+  width: 3px;
+  animation: blink 1s infinite;
+}
+
+.cursor.typing {
+  animation: none;
+}
+
+@keyframes blink {
+  0% {
+    background-color: #ccc;
+  }
+  49% {
+    background-color: #ccc;
+  }
+  50% {
+    background-color: transparent;
+  }
+  99% {
+    background-color: transparent;
+  }
+  100% {
+    background-color: #ccc;
+  }
+}
+
+/* Title styling */
+h2 {
+  margin: 0; /* Remove default margin */
+  font-size: 1rem; /* Use rem for font size */
+  color: #f8f9fa; /* Text color */
+  text-align: center; /* Center text */
+  width: 100%; /* Full width to center text */
 }
