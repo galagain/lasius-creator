@@ -1,5 +1,5 @@
 from flask import Flask, request, render_template, Response, jsonify
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO, emit, join_room, leave_room
 import os
 import time
 import logging
@@ -26,14 +26,15 @@ fields_to_fetch = (
 )
 
 
-def log_message(message):
+def log_message(room, message):
     """
-    Logs a message by emitting it through the socketio connection.
+    Logs a message by emitting it through the socketio connection to a specific room.
 
     Args:
+        room (str): The room to which the message should be sent.
         message (str): The message to be logged.
     """
-    socketio.emit("log_message", {"message": message})
+    socketio.emit("log_message", {"message": message}, room=room)
 
 
 def make_api_call(url, headers, params=None, max_retries=3):
@@ -55,15 +56,19 @@ def make_api_call(url, headers, params=None, max_retries=3):
             return response.json()
         else:
             log_message(
-                f"Attempt {attempt + 1}/{max_retries} - Error {response.status_code}: {response.text}"
+                headers.get("sid", "general"),
+                f"Attempt {attempt + 1}/{max_retries} - Error {response.status_code}: {response.text}",
             )
             time.sleep(2)
 
-    log_message(f"Failed to get a successful response after {max_retries} attempts")
+    log_message(
+        headers.get("sid", "general"),
+        f"Failed to get a successful response after {max_retries} attempts",
+    )
     return None
 
 
-def search_semantic_scholar(query, api_key, limit=100, offset=0):
+def search_semantic_scholar(query, api_key, limit=100, offset=0, sid=None):
     """
     Search for papers using the Semantic Scholar API.
 
@@ -72,12 +77,13 @@ def search_semantic_scholar(query, api_key, limit=100, offset=0):
         api_key (str): API key for authentication.
         limit (int, optional): Number of results to fetch per request. Defaults to 100.
         offset (int, optional): Offset for pagination. Defaults to 0.
+        sid (str): The session ID of the user.
 
     Returns:
         dict: The JSON response containing search results.
     """
     url = "https://api.semanticscholar.org/graph/v1/paper/search"
-    headers = {"x-api-key": api_key}
+    headers = {"x-api-key": api_key, "sid": sid}
     params = {
         "query": query,
         "fields": fields_to_fetch,
@@ -87,7 +93,7 @@ def search_semantic_scholar(query, api_key, limit=100, offset=0):
     return make_api_call(url, headers, params)
 
 
-def fetch_papers(query, api_key, total_papers, title):
+def fetch_papers(query, api_key, total_papers, title, room):
     """
     Fetch a specified number of papers based on a search query.
 
@@ -96,6 +102,7 @@ def fetch_papers(query, api_key, total_papers, title):
         api_key (str): API key for authentication.
         total_papers (int): Total number of papers to fetch.
         title (str): Title of the research.
+        room (str): The room for logging messages.
 
     Returns:
         list: A list of fetched paper data.
@@ -106,7 +113,9 @@ def fetch_papers(query, api_key, total_papers, title):
     request_count = 0
 
     while len(all_papers) < total_papers:
-        data = search_semantic_scholar(query, api_key, limit=limit, offset=offset)
+        data = search_semantic_scholar(
+            query, api_key, limit=limit, offset=offset, sid=room
+        )
         request_count += 1
 
         if data:
@@ -116,17 +125,18 @@ def fetch_papers(query, api_key, total_papers, title):
             all_papers.extend(papers)
             offset += limit
             log_message(
-                f"[{title}] Fetched {len(papers)} papers. Total so far: {len(all_papers)}. Total requests: {request_count}"
+                room,
+                f"[{title}] Fetched {len(papers)} papers. Total so far: {len(all_papers)}. Total requests: {request_count}",
             )
             time.sleep(1)
         else:
             break
 
-    log_message(f"[{title}] Total requests made: {request_count}")
+    log_message(room, f"[{title}] Total requests made: {request_count}")
     return all_papers[:total_papers]
 
 
-def generate_json(queries, total_papers, title):
+def generate_json(queries, total_papers, title, room):
     """
     Generate a JSON string containing information about fetched papers.
 
@@ -134,6 +144,7 @@ def generate_json(queries, total_papers, title):
         queries (list): A list of queries to fetch papers for.
         total_papers (int): The maximum number of papers to fetch for each query.
         title (str): The title of the process.
+        room (str): The room for logging messages.
 
     Returns:
         str: A JSON string containing information about the fetched papers.
@@ -143,7 +154,8 @@ def generate_json(queries, total_papers, title):
 
     if not api_key:
         log_message(
-            "API key for Semantic Scholar not found. Make sure it is set in the .env file."
+            room,
+            "API key for Semantic Scholar not found. Make sure it is set in the .env file.",
         )
         return None
 
@@ -157,9 +169,10 @@ def generate_json(queries, total_papers, title):
     for query_idx, query in enumerate(queries):
         query = query.strip()
         log_message(
-            f"[{title}] Processing query ({query_idx + 1}/{len(queries)}): '{query}'"
+            room,
+            f"[{title}] Processing query ({query_idx + 1}/{len(queries)}): '{query}'",
         )
-        query_papers = fetch_papers(query, api_key, total_papers, title)
+        query_papers = fetch_papers(query, api_key, total_papers, title, room)
         for paper in query_papers:
             paper_id = paper["paperId"]
             if paper_id not in papers_dict:
@@ -214,7 +227,8 @@ def generate_json(queries, total_papers, title):
             queries_data_more[query].append(paper_id)
 
     log_message(
-        f"[{title}] Total unique papers after removing duplicates: {len(paper_data)}"
+        room,
+        f"[{title}] Total unique papers after removing duplicates: {len(paper_data)}",
     )
 
     result = {
@@ -254,7 +268,8 @@ def generate_json_route():
     queries = request.form["queries"].split(",")
     total_papers = int(request.form["total_papers"])
     title = request.form["title"]
-    json_data = generate_json(queries, total_papers, title)
+    sid = request.args.get("sid")  # Retrieve 'sid' from the request arguments
+    json_data = generate_json(queries, total_papers, title, sid)
     if json_data:
         return jsonify({"json_data": json_data})
     else:
@@ -278,6 +293,26 @@ def download_json():
         mimetype="application/json",
         headers={"Content-Disposition": f"attachment;filename={filename}"},
     )
+
+
+@socketio.on("connect")
+def handle_connect():
+    """
+    Handle a new connection by joining a room associated with the session ID.
+    """
+    room = request.sid
+    join_room(room)
+    log_message(room, "Connected to the server.")
+
+
+@socketio.on("disconnect")
+def handle_disconnect():
+    """
+    Handle a disconnection by leaving the room associated with the session ID.
+    """
+    room = request.sid
+    leave_room(room)
+    log_message(room, "Disconnected from the server.")
 
 
 if __name__ == "__main__":
