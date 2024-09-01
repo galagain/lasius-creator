@@ -1,9 +1,10 @@
-from flask import Flask, request, render_template, Response, jsonify
-from flask_socketio import SocketIO, emit, join_room, leave_room
+import json
 import os
 import time
 import logging
-import json
+from flask import Flask, request, render_template, Response, jsonify
+from flask_socketio import SocketIO, emit, join_room, leave_room
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import requests
 from collections import defaultdict
@@ -16,6 +17,9 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+# Maximum age of cached queries before they need to be refreshed (in days)
+CACHE_MAX_AGE_DAYS = 7
+
 # Fields to fetch from the API
 fields_to_fetch = (
     "title,url,paperId,citationCount,publicationDate,authors,"
@@ -24,6 +28,93 @@ fields_to_fetch = (
     "citations.title,citations.url,citations.paperId,"
     "citations.citationCount,citations.publicationDate,citations.authors"
 )
+
+# Path to the JSON file where queries are stored
+QUERY_FILE = "queries.json"
+
+
+def load_saved_queries():
+    """
+    Load saved queries from a JSON file.
+
+    Returns:
+        list: A list of saved queries, or an empty list if the file doesn't exist or is corrupted.
+    """
+    if os.path.exists(QUERY_FILE):
+        try:
+            with open(QUERY_FILE, "r") as file:
+                return json.load(file).get("queries", [])
+        except json.JSONDecodeError as e:
+            logging.error(f"Error reading JSON file {QUERY_FILE}: {e}")
+            return []
+    return []
+
+
+def save_query(query, limit, offset, result):
+    """
+    Save a new query and its result to the JSON file.
+
+    Args:
+        query (str): The search query.
+        limit (int): The number of results requested.
+        offset (int): The offset for pagination.
+        result (dict): The result of the query.
+    """
+    queries = load_saved_queries()
+    new_entry = {
+        "query": query,
+        "limit": limit,
+        "offset": offset,
+        "result": result,
+        "date_saved": datetime.now().isoformat(),  # Save the current date and time
+    }
+    queries.append(new_entry)
+    with open(QUERY_FILE, "w") as file:
+        json.dump({"queries": queries}, file, indent=4)
+
+
+def is_cache_valid(entry):
+    """
+    Check if a cached entry is still valid based on the maximum cache age.
+
+    Args:
+        entry (dict): A cached query entry.
+
+    Returns:
+        bool: True if the cache is still valid, False otherwise.
+    """
+    date_saved = datetime.fromisoformat(entry["date_saved"])
+    return datetime.now() - date_saved < timedelta(days=CACHE_MAX_AGE_DAYS)
+
+
+def get_saved_query(query, limit, offset):
+    """
+    Retrieve a saved query result if it exists and is not expired.
+
+    Args:
+        query (str): The search query.
+        limit (int): The number of results requested.
+        offset (int): The offset for pagination.
+
+    Returns:
+        dict or None: The result if the query exists and is valid, otherwise None.
+    """
+    queries = load_saved_queries()
+    for entry in queries:
+        if (
+            entry["query"] == query
+            and entry["limit"] == limit
+            and entry["offset"] == offset
+        ):
+            if is_cache_valid(entry):
+                return entry["result"]
+            else:
+                log_message(
+                    "general",
+                    f"Cache expired for query: {query}, limit: {limit}, offset: {offset}",
+                )
+                return None
+    return None
 
 
 def log_message(room, message):
@@ -82,6 +173,14 @@ def search_semantic_scholar(query, api_key, limit=100, offset=0, sid=None):
     Returns:
         dict: The JSON response containing search results.
     """
+    # Check if this query already exists in saved queries and is still valid
+    saved_result = get_saved_query(query, limit, offset)
+    if saved_result:
+        log_message(
+            sid, f"[{query}] Using cached result for limit {limit} and offset {offset}."
+        )
+        return saved_result
+
     url = "https://api.semanticscholar.org/graph/v1/paper/search"
     headers = {"x-api-key": api_key, "sid": sid}
     params = {
@@ -90,7 +189,14 @@ def search_semantic_scholar(query, api_key, limit=100, offset=0, sid=None):
         "limit": limit,
         "offset": offset,
     }
-    return make_api_call(url, headers, params)
+    response = make_api_call(url, headers, params)
+
+    if response:
+        # Save the result to the JSON file for future use
+        save_query(query, limit, offset, response)
+        return response
+    else:
+        return None
 
 
 def fetch_papers(query, api_key, total_papers, title, room):
